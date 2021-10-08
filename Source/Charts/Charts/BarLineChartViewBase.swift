@@ -789,6 +789,14 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 
                 _isDragging = false
             }
+            else if isHighlightPerDragEnabled
+            {
+                if lastHighlighted != nil
+                {
+                    self.lastHighlighted = nil
+                    self.highlightValue(nil, callDelegate: true)
+                }
+            }
             
             if _outerScrollView !== nil
             {
