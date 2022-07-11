@@ -571,4 +571,12 @@ extension ChartDataSet: RangeReplaceableCollection {
         entries.removeAll(keepingCapacity: keepCapacity)
         notifyDataSetChanged()
     }
+    
+    public func replaceSubrange<C>(_ subrange: Swift.Range<Index>, with newElements: C) where C : Collection, Element == C.Element
+    {
+        assert(!(self is CombinedChartData), "\(#function) not supported for CombinedData")
+
+        entries.replaceSubrange(subrange, with: newElements)
+        newElements.forEach { self.calcMinMax(entry: $0) }
+    }
 }
