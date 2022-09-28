@@ -87,6 +87,7 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
     /// **default**: An instance of XAxisRenderer
     @objc open lazy var xAxisRenderer = XAxisRenderer(viewPortHandler: viewPortHandler, axis: xAxis, transformer: _leftAxisTransformer)
 
+    internal var _longPressGestureRecognizer: UILongPressGestureRecognizer!
     internal var _tapGestureRecognizer: NSUITapGestureRecognizer!
     internal var _doubleTapGestureRecognizer: NSUITapGestureRecognizer!
     #if !os(tvOS)
@@ -96,6 +97,18 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
     
     /// flag that indicates if a custom viewport offset has been set
     private var _customViewPortEnabled = false
+    
+    private var longPressAndPanning: Bool = false
+    override open var maxHighlightDistance: CGFloat {
+        get {
+            return longPressAndPanning ? 9999 : super.maxHighlightDistance
+        }
+        set {
+            if !longPressAndPanning {
+                super.maxHighlightDistance = newValue
+            }
+        }
+    }
     
     public override init(frame: CGRect)
     {
@@ -121,6 +134,8 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
 
         self.highlighter = ChartHighlighter(chart: self)
         
+        _longPressGestureRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(longPressGestureRecognized(_:)))
+        _longPressGestureRecognizer.minimumPressDuration = 0.2
         _tapGestureRecognizer = NSUITapGestureRecognizer(target: self, action: #selector(tapGestureRecognized(_:)))
         _doubleTapGestureRecognizer = NSUITapGestureRecognizer(target: self, action: #selector(doubleTapGestureRecognized(_:)))
         _doubleTapGestureRecognizer.nsuiNumberOfTapsRequired = 2
@@ -128,6 +143,7 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
         
         _panGestureRecognizer.delegate = self
         
+        self.addGestureRecognizer(_longPressGestureRecognizer)
         self.addGestureRecognizer(_tapGestureRecognizer)
         self.addGestureRecognizer(_doubleTapGestureRecognizer)
         self.addGestureRecognizer(_panGestureRecognizer)
@@ -299,7 +315,7 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
     private var _autoScaleLastHighestVisibleX: Double?
     
     /// Performs auto scaling of the axis by recalculating the minimum and maximum y-values based on the entries currently in view.
-    internal func autoScale()
+    open func autoScale()
     {
         guard let data = data
             else { return }
@@ -529,6 +545,30 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
     private var _decelerationDisplayLink: NSUIDisplayLink!
     private var _decelerationVelocity = CGPoint()
     
+    @objc private func longPressGestureRecognized(_ recognizer: UILongPressGestureRecognizer)
+    {
+        if data === nil
+        {
+            return
+        }
+        
+        if recognizer.state == NSUIGestureRecognizerState.began
+        {
+            longPressAndPanning = true
+            let h = getHighlightByTouchPoint(recognizer.location(in: self))
+            
+            lastHighlighted = h
+            highlightValue(h, callDelegate: true)
+            if lastHighlighted === nil {
+                longPressAndPanning = false
+            }
+        } else if recognizer.state == .ended || recognizer.state == .cancelled {
+            longPressAndPanning = false
+            lastHighlighted = nil
+            highlightValue(nil, callDelegate: true)
+        }
+    }
+    
     @objc private func tapGestureRecognized(_ recognizer: NSUITapGestureRecognizer)
     {
         if data === nil
@@ -680,6 +720,23 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
         if recognizer.state == NSUIGestureRecognizerState.began && recognizer.nsuiNumberOfTouches() > 0
         {
             stopDeceleration()
+            if self.isHighlightPerDragEnabled
+            {
+                let h = getHighlightByTouchPoint(recognizer.location(in: self))
+                
+                let lastHighlighted = self.lastHighlighted
+                
+                if h != lastHighlighted
+                {
+                    self.lastHighlighted = h
+                    self.highlightValue(h, callDelegate: true)
+                }
+                // We will only handle highlights on NSUIGestureRecognizerState.Changed
+                if self.lastHighlighted !== nil {
+                    _isDragging = false
+                    return
+                }
+            }
             
             if data === nil || !self.isDragEnabled
             { // If we have no data, we have nothing to pan and no data to highlight
@@ -728,16 +785,10 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 
                 _lastPanPoint = recognizer.translation(in: self)
             }
-            else if self.isHighlightPerDragEnabled
-            {
-                // We will only handle highlights on NSUIGestureRecognizerState.Changed
-                
-                _isDragging = false
                 
                 // Prevent the parent scroll view from scrolling
                 _outerScrollView?.nsuiIsScrollEnabled = false
 
-            }
         }
         else if recognizer.state == NSUIGestureRecognizerState.changed
         {
@@ -774,6 +825,7 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
         }
         else if recognizer.state == NSUIGestureRecognizerState.ended || recognizer.state == NSUIGestureRecognizerState.cancelled
         {
+            longPressAndPanning = false
             if _isDragging
             {
                 if recognizer.state == NSUIGestureRecognizerState.ended && isDragDecelerationEnabled
@@ -788,6 +840,14 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 }
                 
                 _isDragging = false
+            }
+            else if isHighlightPerDragEnabled
+            {
+                if lastHighlighted != nil
+                {
+                    self.lastHighlighted = nil
+                    self.highlightValue(nil, callDelegate: true)
+                }
             }
             
             if _outerScrollView !== nil
@@ -974,6 +1034,13 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 
                 return true
             }
+        }
+        
+        if gestureRecognizer is NSUIPanGestureRecognizer,
+            otherGestureRecognizer is UILongPressGestureRecognizer,
+            gestureRecognizer == _panGestureRecognizer
+        {
+            return true
         }
         
         return false
