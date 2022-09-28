@@ -337,7 +337,7 @@ internal struct EasingFunctions
         return Double( position * position * ((s + 1.0) * position - s) )
     }
     
-    internal static let EaseOutBack = { (elapsed: TimeInterval, duration: TimeInterval) -> Double in
+    internal static func EaseOutBack(elapsed: TimeInterval, duration: TimeInterval) -> Double {
         let s: TimeInterval = 1.70158
         var position: TimeInterval = elapsed / duration
         position -= 1.0
