@@ -733,6 +733,10 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 // We will only handle highlights on NSUIGestureRecognizerState.Changed
                 
                 _isDragging = false
+                
+                // Prevent the parent scroll view from scrolling
+                _outerScrollView?.nsuiIsScrollEnabled = false
+
             }
         }
         else if recognizer.state == NSUIGestureRecognizerState.changed
@@ -784,16 +788,6 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 }
                 
                 _isDragging = false
-                
-                delegate?.chartViewDidEndPanning?(self)
-            }
-            else if isHighlightPerDragEnabled
-            {
-                if lastHighlighted != nil
-                {
-                    self.lastHighlighted = nil
-                    self.highlightValue(nil, callDelegate: true)
-                }
             }
             
             if _outerScrollView !== nil
@@ -801,6 +795,8 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 _outerScrollView?.nsuiIsScrollEnabled = true
                 _outerScrollView = nil
             }
+
+            delegate?.chartViewDidEndPanning?(self)
         }
     }
     
